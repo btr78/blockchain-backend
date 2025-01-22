@@ -1,14 +1,22 @@
-// Import required modules
-const { Blockchain, Transaction, AILayer } = require('./blockchain');
+const { Blockchain, Block, Transaction, AILayer } = require('./blockchain');
 
-// Initialize AI Layer
+// Initialize AI Layer and Blockchain
 const aiLayer = new AILayer();
+const blockchain = new Blockchain(aiLayer);
 
-// Initialize Blockchain with AI Layer
-const myBlockchain = new Blockchain(aiLayer);
+// Add some transactions
+console.log('Creating transactions...');
+blockchain.createTransaction(new Transaction('address1', 'address2', 50));
+blockchain.createTransaction(new Transaction('address2', 'address1', 30));
 
-// Example Usage
-myBlockchain.createTransaction(new Transaction('address1', 'address2', 30));
-myBlockchain.minePendingTransactions('miner-address');
+// Mine transactions
+console.log('Starting mining...');
+blockchain.minePendingTransactions('miner-address');
 
-console.log('Balance of miner:', myBlockchain.getBalance('miner-address'));
+// Display balances
+console.log(`Balance of miner: ${blockchain.getBalance('miner-address')}`);
+console.log('All balances:', {
+    address1: blockchain.getBalance('address1'),
+    address2: blockchain.getBalance('address2'),
+    miner: blockchain.getBalance('miner-address'),
+});
