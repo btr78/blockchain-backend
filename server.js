@@ -1,22 +1,39 @@
-const { Blockchain, Block, Transaction, AILayer } = require('./blockchain');
+const express = require('express');
+const { Blockchain, Transaction, AILayer } = require('./blockchain');
 
-// Initialize AI Layer and Blockchain
+const app = express();
+const PORT = 3000;
+
+// Blockchain setup
 const aiLayer = new AILayer();
 const blockchain = new Blockchain(aiLayer);
 
-// Add some transactions
-console.log('Creating transactions...');
-blockchain.createTransaction(new Transaction('address1', 'address2', 50));
-blockchain.createTransaction(new Transaction('address2', 'address1', 30));
+app.use(express.json());
 
-// Mine transactions
-console.log('Starting mining...');
-blockchain.minePendingTransactions('miner-address');
+// Routes
+app.get('/chain', (req, res) => {
+    res.json(blockchain.chain);
+});
 
-// Display balances
-console.log(`Balance of miner: ${blockchain.getBalance('miner-address')}`);
-console.log('All balances:', {
-    address1: blockchain.getBalance('address1'),
-    address2: blockchain.getBalance('address2'),
-    miner: blockchain.getBalance('miner-address'),
+app.post('/transaction', (req, res) => {
+    const { from, to, amount } = req.body;
+    const transaction = new Transaction(from, to, amount);
+    blockchain.createTransaction(transaction);
+    res.json({ message: 'Transaction added to pending transactions.' });
+});
+
+app.get('/mine', (req, res) => {
+    const rewardAddress = 'miner-address';
+    blockchain.minePendingTransactions(rewardAddress);
+    res.json({ message: 'Mining complete.', chain: blockchain.chain });
+});
+
+app.get('/balance/:address', (req, res) => {
+    const balance = blockchain.getBalance(req.params.address);
+    res.json({ address: req.params.address, balance });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
