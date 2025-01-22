@@ -1,12 +1,9 @@
-// Import required libraries
+// blockchain.js
+
 const crypto = require('crypto');
 
 // AI Layer
 class AILayer {
-    constructor() {
-        this.networkData = [];
-    }
-
     analyzeNetwork(blockchain) {
         const avgBlockTime = blockchain.chain.length > 1 ? 
             (blockchain.chain[blockchain.chain.length - 1].timestamp - blockchain.chain[blockchain.chain.length - 2].timestamp) : 0;
@@ -15,9 +12,7 @@ class AILayer {
         if (avgBlockTime > 2000) suggestedDifficulty--;
         else if (avgBlockTime < 1000) suggestedDifficulty++;
 
-        return {
-            suggestedDifficulty: Math.max(1, suggestedDifficulty),
-        };
+        return { suggestedDifficulty: Math.max(1, suggestedDifficulty) };
     }
 
     detectFraudulentTransactions(transactions) {
@@ -37,8 +32,7 @@ class Block {
     }
 
     calculateHash() {
-        return crypto
-            .createHash('sha256')
+        return crypto.createHash('sha256')
             .update(this.index + this.timestamp + JSON.stringify(this.transactions) + this.previousHash + this.nonce)
             .digest('hex');
     }
@@ -69,9 +63,7 @@ class Blockchain {
         this.pendingTransactions = [];
         this.miningReward = 50;
         this.aiLayer = aiLayer;
-        this.energyUsage = 0;
         this.balances = {};
-        this.smartContracts = [];
     }
 
     createGenesisBlock() {
@@ -90,7 +82,7 @@ class Blockchain {
 
         const fraudulentTransactions = this.aiLayer.detectFraudulentTransactions(this.pendingTransactions);
         if (fraudulentTransactions.length > 0) {
-            console.log('Fraudulent transactions detected and removed:', fraudulentTransactions);
+            console.log('Fraudulent transactions removed:', fraudulentTransactions);
             this.pendingTransactions = this.pendingTransactions.filter(tx => !fraudulentTransactions.includes(tx));
         }
 
@@ -101,32 +93,22 @@ class Blockchain {
             this.getLatestBlock().hash
         );
 
-        const aiAnalysis = this.aiLayer.analyzeNetwork(this);
-        this.difficulty = aiAnalysis.suggestedDifficulty;
+        const analysis = this.aiLayer.analyzeNetwork(this);
+        this.difficulty = analysis.suggestedDifficulty;
 
         console.log(`Mining with difficulty: ${this.difficulty}`);
         block.mineBlock(this.difficulty);
-        this.energyUsage += block.nonce * 10;
         this.chain.push(block);
 
-        this.pendingTransactions = [
-            new Transaction(null, rewardAddress, this.miningReward)
-        ];
+        this.pendingTransactions = [new Transaction(null, rewardAddress, this.miningReward)];
     }
 
     createTransaction(transaction) {
-        if (this.validateTransaction(transaction)) {
-            this.pendingTransactions.push(transaction);
-        } else {
-            console.log('Transaction rejected.');
+        if (transaction.amount <= 0) {
+            console.log('Transaction amount must be greater than zero.');
+            return;
         }
-    }
-
-    validateTransaction(transaction) {
-        if (!transaction.from || !transaction.to || transaction.amount <= 0) return false;
-
-        const senderBalance = this.getBalance(transaction.from);
-        return senderBalance >= transaction.amount;
+        this.pendingTransactions.push(transaction);
     }
 
     getBalance(address) {
@@ -139,24 +121,7 @@ class Blockchain {
         }
         return balance;
     }
-
-    deploySmartContract(code) {
-        const address = `contract-${this.smartContracts.length}`;
-        this.smartContracts.push({ address, code });
-        return address;
-    }
-
-    executeSmartContract(address, ...args) {
-        const contract = this.smartContracts.find(c => c.address === address);
-        if (!contract) return console.log('Smart contract not found.');
-
-        try {
-            eval(contract.code)(...args);
-        } catch (e) {
-            console.error('Error executing contract:', e);
-        }
-    }
 }
 
-// Export classes for use in other files
+// Export classes
 module.exports = { Blockchain, Block, Transaction, AILayer };
