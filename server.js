@@ -1,82 +1,162 @@
-const express = require('express');
-const { Blockchain, Transaction, AILayer } = require('./blockchain'); // Importing necessary classes
+// Import required libraries
+const crypto = require('crypto');
 
-const app = express();
-const port = 3000;
-
-app.use(express.json()); // Middleware to parse JSON
-
-// Initialize blockchain and AI Layer
-const aiLayer = new AILayer();
-const myCoin = new Blockchain(aiLayer);
-
-// API Routes
-
-// Create a new transaction
-app.post('/transaction', (req, res) => {
-    const { from, to, amount } = req.body;
-
-    if (!from || !to || typeof amount !== 'number') {
-        return res.status(400).json({ error: 'Invalid transaction format' });
+// AI Layer
+class AILayer {
+    constructor() {
+        this.networkData = [];
     }
 
-    const transaction = new Transaction(from, to, amount);
-    myCoin.createTransaction(transaction);
-    res.json({ message: 'Transaction added', transaction });
-});
+    analyzeNetwork(blockchain) {
+        const avgBlockTime = blockchain.chain.length > 1 ? 
+            (blockchain.chain[blockchain.chain.length - 1].timestamp - blockchain.chain[blockchain.chain.length - 2].timestamp) : 0;
 
-// Mine pending transactions
-app.post('/mine', (req, res) => {
-    const { minerAddress } = req.body;
+        let suggestedDifficulty = blockchain.difficulty;
+        if (avgBlockTime > 2000) suggestedDifficulty--;
+        else if (avgBlockTime < 1000) suggestedDifficulty++;
 
-    if (!minerAddress) {
-        return res.status(400).json({ error: 'Miner address is required' });
+        return {
+            suggestedDifficulty: Math.max(1, suggestedDifficulty),
+        };
     }
 
-    myCoin.minePendingTransactions(minerAddress);
-    res.json({
-        message: 'Mining complete',
-        newBlock: myCoin.getLatestBlock(),
-        balances: myCoin.recalculateBalances(),
-        energyUsage: myCoin.getEnergyUsage(),
-    });
-});
+    detectFraudulentTransactions(transactions) {
+        return transactions.filter(tx => tx.amount <= 0);
+    }
+}
 
-// Get blockchain data
-app.get('/chain', (req, res) => {
-    res.json(myCoin.chain);
-});
-
-// Get balances
-app.get('/balances', (req, res) => {
-    res.json(myCoin.recalculateBalances());
-});
-
-// Deploy smart contract
-app.post('/deploy-contract', (req, res) => {
-    const { code } = req.body;
-
-    if (!code || typeof code !== 'string') {
-        return res.status(400).json({ error: 'Invalid contract code' });
+// Block Class
+class Block {
+    constructor(index, timestamp, transactions, previousHash = '') {
+        this.index = index;
+        this.timestamp = timestamp;
+        this.transactions = transactions;
+        this.previousHash = previousHash;
+        this.nonce = 0;
+        this.hash = this.calculateHash();
     }
 
-    const contractAddress = myCoin.deploySmartContract(code);
-    res.json({ message: 'Smart contract deployed', contractAddress });
-});
-
-// Execute smart contract
-app.post('/execute-contract', (req, res) => {
-    const { contractAddress, args } = req.body;
-
-    if (!contractAddress || !Array.isArray(args)) {
-        return res.status(400).json({ error: 'Invalid request format' });
+    calculateHash() {
+        return crypto
+            .createHash('sha256')
+            .update(this.index + this.timestamp + JSON.stringify(this.transactions) + this.previousHash + this.nonce)
+            .digest('hex');
     }
 
-    myCoin.executeSmartContract(contractAddress, ...args);
-    res.json({ message: 'Smart contract executed', contractAddress });
-});
+    mineBlock(difficulty) {
+        while (!this.hash.startsWith('0'.repeat(difficulty))) {
+            this.nonce++;
+            this.hash = this.calculateHash();
+        }
+        console.log(`Block mined: ${this.hash}`);
+    }
+}
 
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
-});
+// Transaction Class
+class Transaction {
+    constructor(from, to, amount) {
+        this.from = from;
+        this.to = to;
+        this.amount = amount;
+    }
+}
+
+// Blockchain Class
+class Blockchain {
+    constructor(aiLayer) {
+        this.chain = [this.createGenesisBlock()];
+        this.difficulty = 4;
+        this.pendingTransactions = [];
+        this.miningReward = 50;
+        this.aiLayer = aiLayer;
+        this.energyUsage = 0;
+        this.balances = {};
+        this.smartContracts = [];
+    }
+
+    createGenesisBlock() {
+        return new Block(0, Date.now(), [], '0');
+    }
+
+    getLatestBlock() {
+        return this.chain[this.chain.length - 1];
+    }
+
+    minePendingTransactions(rewardAddress) {
+        if (this.pendingTransactions.length === 0) {
+            console.log('No transactions to mine.');
+            return;
+        }
+
+        const fraudulentTransactions = this.aiLayer.detectFraudulentTransactions(this.pendingTransactions);
+        if (fraudulentTransactions.length > 0) {
+            console.log('Fraudulent transactions detected and removed:', fraudulentTransactions);
+            this.pendingTransactions = this.pendingTransactions.filter(tx => !fraudulentTransactions.includes(tx));
+        }
+
+        const block = new Block(
+            this.chain.length,
+            Date.now(),
+            this.pendingTransactions,
+            this.getLatestBlock().hash
+        );
+
+        const aiAnalysis = this.aiLayer.analyzeNetwork(this);
+        this.difficulty = aiAnalysis.suggestedDifficulty;
+
+        console.log(`Mining with difficulty: ${this.difficulty}`);
+        block.mineBlock(this.difficulty);
+        this.energyUsage += block.nonce * 10;
+        this.chain.push(block);
+
+        this.pendingTransactions = [
+            new Transaction(null, rewardAddress, this.miningReward)
+        ];
+    }
+
+    createTransaction(transaction) {
+        if (this.validateTransaction(transaction)) {
+            this.pendingTransactions.push(transaction);
+        } else {
+            console.log('Transaction rejected.');
+        }
+    }
+
+    validateTransaction(transaction) {
+        if (!transaction.from || !transaction.to || transaction.amount <= 0) return false;
+
+        const senderBalance = this.getBalance(transaction.from);
+        return senderBalance >= transaction.amount;
+    }
+
+    getBalance(address) {
+        let balance = 0;
+        for (const block of this.chain) {
+            for (const tx of block.transactions) {
+                if (tx.from === address) balance -= tx.amount;
+                if (tx.to === address) balance += tx.amount;
+            }
+        }
+        return balance;
+    }
+
+    deploySmartContract(code) {
+        const address = `contract-${this.smartContracts.length}`;
+        this.smartContracts.push({ address, code });
+        return address;
+    }
+
+    executeSmartContract(address, ...args) {
+        const contract = this.smartContracts.find(c => c.address === address);
+        if (!contract) return console.log('Smart contract not found.');
+
+        try {
+            eval(contract.code)(...args);
+        } catch (e) {
+            console.error('Error executing contract:', e);
+        }
+    }
+}
+
+// Export classes for use in other files
+module.exports = { Blockchain, Block, Transaction, AILayer };
