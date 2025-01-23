@@ -1,25 +1,32 @@
 {
-  "name": "blockchain-backend",
+  "type": "module",
+  "name": "nodejs",
   "version": "1.0.0",
-  "description": "",
+  "description": "A blockchain-based cryptocurrency system with advanced AI features and smart contract capabilities.",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/btr78/blockchain-backend.git"
-  },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "blockchain",
+    "cryptocurrency",
+    "ai",
+    "smart-contracts",
+    "quantum-crypto"
+  ],
+  "author": "Your Name",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/btr78/blockchain-backend/issues"
-  },
-  "homepage": "https://github.com/btr78/blockchain-backend#readme",
   "dependencies": {
-    "body-parser": "^1.20.3",
-    "express": "^4.21.2",
-    "pm2": "^5.4.3"
+    "@types/node": "^18.0.6",
+    "axios": "^1.2.0",
+    "crypto-random-string": "^3.2.0",
+    "express": "^4.18.2",
+    "js-sha3": "^0.9.3",
+    "libsodium-wrappers": "^0.7.15"
+  },
+  "devDependencies": {
+    "jest": "^29.4.2",
+    "nodemon": "^3.1.9"
   }
 }
