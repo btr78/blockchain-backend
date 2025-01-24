@@ -1,125 +1,171 @@
-// Deployment Enhancements for Blockchain Project
-// Test Cases, Performance Benchmarks, and Deployment Pipeline
+const crypto = require('crypto');
 
-import { Blockchain, Transaction, SmartContract, AILayer, generateKeyPair, sign, verify } from './blockchain';
-import assert from 'assert';
+// Generate a key pair for transaction signing
+function generateKeyPair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+  });
+  return {
+    publicKey: publicKey.export({ type: 'pkcs1', format: 'pem' }),
+    privateKey: privateKey.export({ type: 'pkcs1', format: 'pem' }),
+  };
+}
 
-// --- Test Cases ---
-(async () => {
-  const aiLayer = new AILayer();
-  const blockchain = new Blockchain(aiLayer);
+// Sign a transaction
+function sign(data, privateKey) {
+  const sign = crypto.createSign('SHA256');
+  sign.update(data);
+  return sign.sign(privateKey, 'hex');
+}
 
-  console.log('Running Tests...');
+// Verify the signature of a transaction
+function verify(data, signature, publicKey) {
+  const verify = crypto.createVerify('SHA256');
+  verify.update(data);
+  return verify.verify(publicKey, signature, 'hex');
+}
 
-  // Test Key Pair Generation
-  const keyPair = generateKeyPair();
-  assert(keyPair.publicKey && keyPair.privateKey, 'Key pair generation failed.');
-  console.log('✔ Key Pair Generation Test Passed');
-
-  // Test Transaction Creation and Validation
-  const tx = new Transaction(keyPair.publicKey, 'recipient', 50);
-  await tx.generateId();
-  tx.signTransaction(keyPair.privateKey);
-  assert(tx.validate(blockchain), 'Transaction validation failed.');
-  console.log('✔ Transaction Validation Test Passed');
-
-  // Test Block Mining
-  const initialBalance = blockchain.getBalanceOfAddress(keyPair.publicKey) || 0;
-  blockchain.addTransaction(tx);
-  blockchain.minePendingTransactions(keyPair.publicKey);
-  const newBalance = blockchain.getBalanceOfAddress(keyPair.publicKey);
-  assert(newBalance > initialBalance, 'Mining reward not credited.');
-  console.log('✔ Mining Reward Test Passed');
-
-  // Test Fraudulent Transaction Detection
-  const fraudulentTx = new Transaction('fraudster', 'recipient', -100);
-  blockchain.addTransaction(fraudulentTx);
-  const fraudDetected = aiLayer.detectFraudulentTransactions(blockchain.pendingTransactions);
-  assert(fraudDetected.length > 0, 'Fraudulent transaction not detected.');
-  console.log('✔ Fraudulent Transaction Detection Test Passed');
-
-  console.log('All Tests Passed!');
-})();
-
-// --- Performance Benchmarks ---
-(async () => {
-  console.log('Running Performance Benchmarks...');
-
-  const blockchain = new Blockchain(new AILayer());
-  const numTransactions = 1000;
-  console.time('Transaction Validation');
-  for (let i = 0; i < numTransactions; i++) {
-    const keyPair = generateKeyPair();
-    const tx = new Transaction(keyPair.publicKey, 'recipient', 10);
-    await tx.generateId();
-    tx.signTransaction(keyPair.privateKey);
-    assert(tx.validate(blockchain));
+class Transaction {
+  constructor(sender, recipient, amount) {
+    this.sender = sender;
+    this.recipient = recipient;
+    this.amount = amount;
+    this.timestamp = Date.now();
+    this.signature = null;
+    this.transactionId = null;
   }
-  console.timeEnd('Transaction Validation');
 
-  console.time('Block Mining');
-  const block = new Block(1, Date.now(), [], '0');
-  block.mineBlock(blockchain.difficulty);
-  console.timeEnd('Block Mining');
-})();
+  async generateId() {
+    const data = `${this.sender}${this.recipient}${this.amount}${this.timestamp}`;
+    this.transactionId = crypto.createHash('sha256').update(data).digest('hex');
+  }
 
-// --- Dockerfile for Deployment ---
-const dockerfileContent = `
-# Use Node.js LTS as the base image
-FROM node:18
+  signTransaction(privateKey) {
+    if (this.sender === null) {
+      throw new Error('Transaction must have a sender address.');
+    }
 
-# Set the working directory
-WORKDIR /app
+    const data = `${this.transactionId}${this.sender}${this.recipient}${this.amount}`;
+    this.signature = sign(data, privateKey);
+  }
 
-# Copy package.json and install dependencies
-COPY package*.json ./
-RUN npm install
+  validate(blockchain) {
+    const data = `${this.transactionId}${this.sender}${this.recipient}${this.amount}`;
+    return verify(data, this.signature, this.sender) && blockchain.isValidSender(this.sender, this.amount);
+  }
+}
 
-# Copy the rest of the application
-COPY . .
+class Blockchain {
+  constructor(aiLayer) {
+    this.chain = [];
+    this.pendingTransactions = [];
+    this.difficulty = 3;
+    this.reward = 100;
+    this.aiLayer = aiLayer;
+    this.createGenesisBlock();
+  }
 
-# Expose the port
-EXPOSE 3000
+  createGenesisBlock() {
+    const genesisBlock = new Block(0, Date.now(), [], '0');
+    this.chain.push(genesisBlock);
+  }
 
-# Run the application
-CMD ["node", "server.js"]
-`;
-const fs = require('fs');
-fs.writeFileSync('Dockerfile', dockerfileContent);
-console.log('✔ Dockerfile created for deployment');
+  addTransaction(transaction) {
+    if (!transaction.sender || !transaction.recipient || !transaction.amount) {
+      throw new Error('Transaction must contain sender, recipient, and amount.');
+    }
 
-// --- Deployment Pipeline ---
-const ciConfigContent = `
-name: Node.js CI
+    if (!transaction.transactionId) {
+      throw new Error('Transaction ID is required.');
+    }
 
-on:
-  push:
-    branches:
-      - main
+    this.pendingTransactions.push(transaction);
+  }
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - name: Install dependencies
-        run: npm install
-      - name: Run tests
-        run: npm test
-      - name: Build Docker image
-        run: docker build -t my-blockchain-app .
-      - name: Push to Docker Hub
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        run: |
-          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-          docker tag my-blockchain-app $DOCKER_USERNAME/my-blockchain-app:latest
-          docker push $DOCKER_USERNAME/my-blockchain-app:latest
-`;
-fs.writeFileSync('.github/workflows/ci.yml', ciConfigContent);
-console.log('✔ CI/CD pipeline configured with GitHub Actions');
+  minePendingTransactions(minerAddress) {
+    const block = new Block(
+      this.chain.length,
+      Date.now(),
+      this.pendingTransactions,
+      this.chain[this.chain.length - 1].hash
+    );
+    block.mineBlock(this.difficulty);
+    this.chain.push(block);
+
+    this.pendingTransactions = [
+      new Transaction(null, minerAddress, this.reward), // Reward for mining
+    ];
+  }
+
+  getBalanceOfAddress(address) {
+    let balance = 0;
+    for (const block of this.chain) {
+      for (const tx of block.transactions) {
+        if (tx.recipient === address) {
+          balance += tx.amount;
+        }
+        if (tx.sender === address) {
+          balance -= tx.amount;
+        }
+      }
+    }
+    return balance;
+  }
+
+  isValidSender(sender, amount) {
+    return this.getBalanceOfAddress(sender) >= amount;
+  }
+
+  isValidChain() {
+    let isValid = true;
+
+    for (let i = 1; i < this.chain.length; i++) {
+      const currentBlock = this.chain[i];
+      const previousBlock = this.chain[i - 1];
+
+      if (currentBlock.previousHash !== previousBlock.hash) {
+        isValid = false;
+      }
+
+      if (!currentBlock.hasValidTransactions()) {
+        isValid = false;
+      }
+    }
+
+    return isValid;
+  }
+}
+
+class Block {
+  constructor(index, timestamp, transactions, previousHash = '') {
+    this.index = index;
+    this.timestamp = timestamp;
+    this.transactions = transactions;
+    this.previousHash = previousHash;
+    this.hash = this.calculateHash();
+    this.nonce = 0;
+  }
+
+  calculateHash() {
+    return crypto
+      .createHash('sha256')
+      .update(
+        `${this.index}${this.timestamp}${JSON.stringify(this.transactions)}${this.previousHash}${this.nonce}`
+      )
+      .digest('hex');
+  }
+
+  mineBlock(difficulty) {
+    while (!this.hash.startsWith(Array(difficulty + 1).join('0'))) {
+      this.nonce++;
+      this.hash = this.calculateHash();
+    }
+    console.log('Block mined: ' + this.hash);
+  }
+
+  hasValidTransactions() {
+    return this.transactions.every(tx => tx.validate());
+  }
+}
+
+module.exports = { Blockchain, Transaction, generateKeyPair, sign, verify, Block };
