@@ -4,6 +4,10 @@
 import { Blockchain, Transaction, SmartContract, AILayer, generateKeyPair, sign, verify } from './blockchain';
 import assert from 'assert';
 import fs from 'fs';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // --- Security Enhancements ---
 class SecurityLayer {
@@ -124,15 +128,18 @@ jobs:
       - name: Run tests
         run: npm test
       - name: Build Docker image
-        run: docker build -t my-blockchain-app .
-      - name: Push to Docker Hub
+        run: docker build -t blockchain-app .
+
+      - name: Log in to Docker Hub
         env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: "btsr"
+          DOCKER_PASSWORD: "dckr_pat_3BbKRVcDOeUNtg-ooCZLBigDny4"
+        run: echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+      - name: Tag and Push to Docker Hub
         run: |
-          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-          docker tag my-blockchain-app $DOCKER_USERNAME/my-blockchain-app:latest
-          docker push $DOCKER_USERNAME/my-blockchain-app:latest
+          docker tag blockchain-app btsr/blockchain-app:latest
+          docker push btsr/blockchain-app:latest
 `;
 fs.writeFileSync('.github/workflows/ci.yml', ciConfigContent);
 console.log('✔ CI/CD pipeline configured with GitHub Actions');
